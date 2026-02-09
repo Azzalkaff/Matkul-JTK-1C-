@@ -630,6 +630,32 @@ body::before {
                 padding: 8px 15px;
             }
         }
+		
+		/* --- TAMBAHAN CSS: UPCOMING FEATURE --- */
+
+/* Gaya untuk kartu yang AKAN tayang (Upcoming) */
+.zen-card.is-upcoming {
+    border: 2px solid rgba(245, 158, 11, 0.5) !important; /* Border Orange */
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.2) !important; /* Glow halus */
+}
+
+/* Ubah warna icon & teks saat mode Upcoming */
+.dynamic-island.upcoming-mode .island-icon {
+    background: #f59e0b !important; /* Warna Amber/Orange */
+    animation: pulse-yellow-island 2s infinite;
+    box-shadow: none !important;
+}
+
+.dynamic-island.upcoming-mode .island-label {
+    color: #f59e0b !important; /* Teks label jadi orange */
+}
+
+/* Animasi denyut warna kuning */
+@keyframes pulse-yellow-island {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
     </style>
 </head> 
 <body>
@@ -1049,36 +1075,27 @@ function renderWeekendView(dayName) {
         // Start App
         document.addEventListener('DOMContentLoaded', initApp);
 		
-		// --- 4. NEW FEATURE: LIVE CARD STATUS (DENGAN CEK HARI) ---
-        function updateCardStatus() {
+		function updateCardStatus() {
             const now = new Date();
             
             // 1. Cek Hari Dulu!
             const daysMap = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
-            const todayName = daysMap[now.getDay()]; // misal: "senin"
+            const todayName = daysMap[now.getDay()]; 
 
-            // Ambil hari yang sedang dilihat di layar (dari Tab yang aktif)
             const activeTab = document.querySelector('.day-pill.active');
-            
-            // Jaga-jaga kalau belum ada tab aktif
             if (!activeTab) return; 
 
             const currentViewedDay = activeTab.textContent.toLowerCase().trim();
 
-            // LOGIKA PENTING:
-            // Jika hari yang dilihat di layar BUKAN hari ini (misal lihat tab Selasa padahal ini Senin)
-            // Maka HENTIKAN proses. Jangan nyalakan kartu apapun.
+            // Jika bukan hari ini, reset semua dan keluar
             if (currentViewedDay !== todayName) {
-                // Pastikan semua kartu mati (hapus status aktif)
                 document.querySelectorAll('.zen-card').forEach(c => {
-                    c.classList.remove('is-active');
-                    // Opsional: jangan set 'is-past' juga biar bersih, atau biarkan 'is-past' tetap ada
-                    // c.classList.remove('is-past'); 
+                    c.classList.remove('is-active', 'is-past', 'is-upcoming');
                 });
-                return; // Keluar dari fungsi
+                return; 
             }
 
-            // 2. Jika harinya COCOK, baru cek Jam
+            // 2. Cek Jam
             const currentHours = now.getHours();
             const currentMinutes = now.getMinutes();
             const currentTimeValue = currentHours * 60 + currentMinutes; 
@@ -1099,15 +1116,14 @@ function renderWeekendView(dayName) {
                 const startMin = getMinutes(startStr);
                 const endMin = getMinutes(endStr);
 
-                // Reset dulu
-                card.classList.remove('is-active', 'is-past');
+                // Reset semua class status
+                card.classList.remove('is-active', 'is-past', 'is-upcoming');
 
-                // Cek Waktu
+                // --- LOGIKA UTAMA ---
                 if (currentTimeValue >= startMin && currentTimeValue < endMin) {
-                    // SEDANG BERLANGSUNG
+                    // KONDISI 1: SEDANG BERLANGSUNG
                     card.classList.add('is-active');
                     
-                    // Update Progress Bar
                     const duration = endMin - startMin;
                     const elapsed = currentTimeValue - startMin;
                     const percent = (elapsed / duration) * 100;
@@ -1115,38 +1131,90 @@ function renderWeekendView(dayName) {
                     if(bar) bar.style.width = `${percent}%`;
 
                 } else if (currentTimeValue >= endMin) {
-                    // SUDAH LEWAT
+                    // KONDISI 2: SUDAH LEWAT
                     card.classList.add('is-past');
+
+                } else {
+                    // KONDISI 3: AKAN MULAI (UPCOMING)
+                    // Cek jika waktu sekarang < waktu mulai, tapi selisihnya <= 60 menit
+                    const diff = startMin - currentTimeValue;
+                    if (diff > 0 && diff <= 60) {
+                        card.classList.add('is-upcoming');
+                        // Simpan sisa menit di atribut agar bisa dibaca fungsi lain
+                        card.setAttribute('data-mins-until', diff);
+                    }
                 }
             });
         }
-		
-		// --- FUNGSI DYNAMIC ISLAND ---
-function updateDynamicIsland() {
-    const island = document.getElementById('dynamicStatusBar');
-    const islandText = document.getElementById('islandText');
-    const islandTime = document.getElementById('islandTime');
-    
-    // Cari kartu yang sedang aktif (sudah ditandai oleh logika sebelumnya)
-    const activeCard = document.querySelector('.zen-card.is-active');
+		function updateDynamicIsland() {
+            const island = document.getElementById('dynamicStatusBar');
+            const islandText = document.getElementById('islandText');
+            const islandTime = document.getElementById('islandTime');
+            // Pastikan elemen label diambil dengan aman
+            let islandLabel = island.querySelector('.island-label');
+            if (!islandLabel) {
+                 // Fallback jika class belum ada di HTML, ambil elemen small pertama
+                 islandLabel = island.querySelector('small');
+            }
 
-    if (activeCard) {
-        // 1. Ambil data dari kartu yang aktif
-        const subject = activeCard.querySelector('.card-subject').innerText;
-        const endTime = activeCard.getAttribute('data-end'); // Ambil jam selesai
-        
-        // 2. Isi konten Island
-        islandText.textContent = subject;
-        islandTime.textContent = `Selesai ${endTime}`;
-        
-        // 3. Munculkan Island
-        island.classList.add('visible');
-    } else {
-        // 4. Jika tidak ada kelas aktif, sembunyikan Island
-        island.classList.remove('visible');
-    }
-}
-		
+            const activeCard = document.querySelector('.zen-card.is-active');
+            const upcomingCard = document.querySelector('.zen-card.is-upcoming');
+
+            // Reset mode tampilan
+            island.classList.remove('upcoming-mode');
+
+            if (activeCard) {
+                // --- KONDISI 1: ADA KELAS LIVE (SEDANG BERLANGSUNG) ---
+                const subject = activeCard.querySelector('.card-subject').innerText;
+                const endTimeStr = activeCard.getAttribute('data-end'); // Contoh: "09:30"
+                
+                // --- LOGIKA HITUNG SISA WAKTU ---
+                const now = new Date();
+                const currentMins = now.getHours() * 60 + now.getMinutes();
+                
+                // Parsing waktu selesai
+                const [endH, endM] = endTimeStr.split(':').map(Number);
+                const endTotalMins = endH * 60 + endM;
+                
+                // Hitung selisih
+                const diff = endTotalMins - currentMins;
+                
+                // Format teks sisa waktu
+                let timeLeftText = "";
+                if (diff >= 60) {
+                    const h = Math.floor(diff / 60);
+                    const m = diff % 60;
+                    // Jika menitnya 0, cukup tulis jamnya saja agar rapi
+                    timeLeftText = m > 0 ? `${h} jam ${m} menit lagi` : `${h} jam lagi`;
+                } else if (diff > 0) {
+                    timeLeftText = `${diff} menit lagi`;
+                } else {
+                    timeLeftText = "Segera berakhir";
+                }
+
+                // Update Teks di Island
+                islandLabel.textContent = "SEDANG BERLANGSUNG";
+                islandText.textContent = subject;
+                islandTime.textContent = timeLeftText; // Menampilkan hitung mundur
+                
+                island.classList.add('visible');
+
+            } else if (upcomingCard) {
+                // --- KONDISI 2: AKAN MULAI (UPCOMING) ---
+                const subject = upcomingCard.querySelector('.card-subject').innerText;
+                const minsLeft = upcomingCard.getAttribute('data-mins-until');
+                
+                islandLabel.textContent = "SEGERA DIMULAI";
+                islandText.textContent = subject;
+                islandTime.textContent = `Dalam ${minsLeft} menit`;
+                
+                island.classList.add('visible', 'upcoming-mode');
+
+            } else {
+                // --- KONDISI 3: TIDAK ADA KEGIATAN ---
+                island.classList.remove('visible');
+            }
+        }
     </script>
 </body>
 </html>
